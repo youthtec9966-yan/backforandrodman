@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Android Live2D</title>
+<link rel="icon" href="/res/image/logo.ico">
+<style>
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000 url('/res/image/bk.png') no-repeat center center;
+  background-size: cover;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+#status {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  top: 16px;
+  z-index: 10;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(17, 24, 39, 0.72);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.5;
+}
+#hint {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 10;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.56);
+  color: #d1d5db;
+  font-size: 16px;
+}
+canvas {
+  display: block;
+}
+</style>
+<script src="./pixi.min.js"></script>
+<script src="./live2dcubismcore.min.js"></script>
+<script src="./cubism4.min.js"></script>
+</head>
+<body>
+<!-- <div id="status">Live2D 初始化中...</div>
+<div id="hint">当前为安卓端纯 Live2D 显示模式</div> -->
+<script>
+const statusEl = document.getElementById('status');
+const params = new URLSearchParams(window.location.search);
+const modelUrl = params.get('model') || '/models/live2d_models/mrlu/mrlu.model3.json';
+const previewMode = params.get('preview') === '1';
+const normalizedModelUrl = decodeURIComponent(modelUrl).toLowerCase();
+const requestedModelScale = Number(params.get('scale'));
+const modelHeightRatio = Number.isFinite(requestedModelScale) && requestedModelScale > 0
+  ? Math.max(0.5, Math.min(1.4, requestedModelScale / 100))
+  : 0.95;
+const modelScaleOverride = normalizedModelUrl.includes('/models/live2d_models/police1124/')
+  ? 0.84
+  : 1.0;
+const modelGestureState = {
+  offsetX: 0,
+  offsetY: 0,
+  scale: 1,
+  baseX: 0,
+  baseY: 0,
+  baseScale: 1,
+  active: new Map(),
+  dragging: false,
+  pinching: false,
+  lastX: 0,
+  lastY: 0,
+  pinchDistance: 0,
+  pinchScale: 1,
+  editing: false,
+  activateTimer: null
+};
+try {
+  const savedModelTransform = JSON.parse(localStorage.getItem('live2d_model_transform') || '{}');
+  modelGestureState.offsetX = Number(savedModelTransform.x) || 0;
+  modelGestureState.offsetY = Number(savedModelTransform.y) || 0;
+  modelGestureState.scale = Number(savedModelTransform.scale) || 1;
+} catch (_) {}
+
+let app = null;
+let model = null;
+let hintEl = document.getElementById('hint');
+let mouthOpenTarget = 0;
+let mouthFormTarget = 0;
+let mouthOpenCurrent = 0;
+let mouthFormCurrent = 0;
+let mouthRaf = null;
+let mouthTickerAttached = false;
+let talkingUntil = 0;
+let mouthOpenParamIndex = -1;
+let mouthFormParamIndex = -1;
+let motionSeed = Math.random() * Math.PI * 2;
+let lastFrameAt = 0;
+let talkingState = false;
+let standbyState = false;
+let thinkingState = false;
+let standbyMotionTimer = null;
+let currentMotionKey = '';
+let motionDrivenAnimation = false;
+let suppressBodyMotion = false;
+let speakingMotionMode = 'baishou';
+let talkPoseTarget = 0;
+let talkPoseCurrent = 0;
+let talkStrengthCurrent = 0;
+let bodyEnergyCurrent = 0;
+let phraseImpulse = 0;
+let phraseImpulseVelocity = 0;
+let cuePitch = 0;
+let cueTurn = 0;
+let cueBody = 0;
+let cueLift = 0;
+let bodySwayCurrent = 0;
+let headTurnCurrent = 0;
+let headPitchCurrent = 0;
+let headRollCurrent = 0;
+let bustYCurrent = 0;
+let breathCurrent = 0.46;
+const renderResolution = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
+
+function setStatus(text) {
+  if (previewMode) {
+    if (statusEl) statusEl.style.display = 'none';
+    return;
+  }
+  if (statusEl) {
+    const visible = !!(text && String(text).trim());
+    statusEl.textContent = visible ? text : '';
+    statusEl.style.display = visible ? 'block' : 'none';
+  }
+  try { console.log(text); } catch {}
+}
+
+function setHint(text) {
+  if (previewMode) {
+    if (hintEl) hintEl.style.display = 'none';
+    return;
+  }
+  if (hintEl) {
+    const visible = !!(text && String(text).trim());
+    hintEl.textContent = visible ? text : '';
+    hintEl.style.display = visible ? 'block' : 'none';
+  }
+  try { console.log('[hint]', text); } catch {}
+}
+
+function getCoreModel() {
+  try {
+    return model && model.internalModel && model.internalModel.coreModel
+      ? model.internalModel.coreModel
+      : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function resolveCoreParameterIndex(core, id) {
+  if (!core || !id) return -1;
+  try {
+    if (typeof core.getParameterIndex === 'function') {
+      const index = core.getParameterIndex(id);
+      if (Number.isFinite(index) && index >= 0) {
+        return index;
+      }
+    }
+  } catch (_) {}
+  try {
+    const ids = core._parameterIds || (core.parameters && core.parameters.ids) || null;
+    if (Array.isArray(ids)) {
+      return ids.findIndex((item) => String(item) === String(id));
+    }
+  } catch (_) {}
+  return -1;
+}
+
+function resolveMouthParameterIndices(force) {
+  const core = getCoreModel();
+  if (!core) return;
+  if (force || mouthOpenParamIndex < 0) {
+    mouthOpenParamIndex = resolveCoreParameterIndex(core, 'ParamMouthOpenY');
+  }
+  if (force || mouthFormParamIndex < 0) {
+    mouthFormParamIndex = resolveCoreParameterIndex(core, 'ParamMouthForm');
+  }
+}
+
+function setCoreParamValue(core, id, index, value) {
+  if (!core) return;
+  try {
+    if (index >= 0 && typeof core.setParameterValueByIndex === 'function') {
+      core.setParameterValueByIndex(index, value);
+      return;
+    }
+  } catch (_) {}
+  try {
+    if (typeof core.setParameterValueById === 'function') {
+      core.setParameterValueById(id, value);
+    }
+  } catch (_) {}
+}
+
+function applyMouth(open, form) {
+  const core = getCoreModel();
+  if (!core) return;
+  resolveMouthParameterIndices(false);
+  setCoreParamValue(
+    core,
+    'ParamMouthOpenY',
+    mouthOpenParamIndex,
+    Math.max(0, Math.min(1, open))
+  );
+  setCoreParamValue(
+    core,
+    'ParamMouthForm',
+    mouthFormParamIndex,
+    Math.max(-1, Math.min(1, form))
+  );
+}
+
+function setParam(core, id, value) {
+  if (!core) return;
+  try {
+    core.setParameterValueById(id, value);
+  } catch (_) {}
+}
+
+function applyTalkMotion(now) {
+  if (motionDrivenAnimation || suppressBodyMotion) {
+    return;
+  }
+  const core = getCoreModel();
+  if (!core) return;
+  const t = now * 0.001;
+  const dt = Math.min(0.05, Math.max(0.001, (now - (lastFrameAt || now)) / 1000));
+  const activeTalk = performance.now() < talkingUntil ? 1 : 0;
+  const talkStrengthTarget = Math.max(mouthOpenCurrent, activeTalk ? 0.08 : 0);
+  const bodyEnergyTarget = Math.max(talkPoseCurrent * 0.45, talkStrengthTarget);
+
+  talkPoseTarget = activeTalk ? 1 : 0;
+  talkPoseCurrent += (talkPoseTarget - talkPoseCurrent) * Math.min(1, dt * (talkPoseTarget > talkPoseCurrent ? 7.5 : 3.2));
+  talkStrengthCurrent += (talkStrengthTarget - talkStrengthCurrent) * Math.min(1, dt * (talkStrengthTarget > talkStrengthCurrent ? 9.0 : 4.0));
+  bodyEnergyCurrent += (bodyEnergyTarget - bodyEnergyCurrent) * Math.min(1, dt * (bodyEnergyTarget > bodyEnergyCurrent ? 4.8 : 2.1));
+
+  phraseImpulseVelocity += (0 - phraseImpulse) * dt * 18;
+  phraseImpulseVelocity *= Math.pow(0.24, dt);
+  phraseImpulse += phraseImpulseVelocity * dt;
+  cuePitch += (0 - cuePitch) * Math.min(1, dt * 6.2);
+  cueTurn += (0 - cueTurn) * Math.min(1, dt * 5.0);
+  cueBody += (0 - cueBody) * Math.min(1, dt * 4.6);
+  cueLift += (0 - cueLift) * Math.min(1, dt * 5.5);
+
+  const idleBreath = Math.sin(t * 1.6 + motionSeed) * 0.12;
+  const breathTarget = 0.46 + idleBreath + talkPoseCurrent * 0.14 + bodyEnergyCurrent * 0.14 + cueLift * 0.03;
+  const bodySwayTarget = Math.sin(t * 1.75 + motionSeed * 0.8) * (0.55 + talkPoseCurrent * 0.75 + bodyEnergyCurrent * 1.25) + cueBody * 1.45;
+  const headTurnTarget = Math.sin(t * 3.25 + motionSeed * 1.3) * (0.45 + talkPoseCurrent * 0.65 + bodyEnergyCurrent * 0.95) + cueTurn * 1.75;
+  const headPitchTarget = (-0.72 * talkPoseCurrent) + phraseImpulse * 2.8 + Math.cos(t * 2.65 + motionSeed * 0.5) * (0.20 + bodyEnergyCurrent * 0.45) + cuePitch * 2.5;
+  const headRollTarget = Math.sin(t * 2.45 + motionSeed * 0.9) * (0.08 + bodyEnergyCurrent * 0.18) + cueTurn * 0.16;
+  const bustYTarget = (-0.10 * talkPoseCurrent) + Math.sin(t * 2.1 + motionSeed * 1.7) * (0.08 + bodyEnergyCurrent * 0.18) - cueLift * 0.14;
+
+  bodySwayCurrent += (bodySwayTarget - bodySwayCurrent) * Math.min(1, dt * 3.4);
+  headTurnCurrent += (headTurnTarget - headTurnCurrent) * Math.min(1, dt * 4.0);
+  headPitchCurrent += (headPitchTarget - headPitchCurrent) * Math.min(1, dt * 3.8);
+  headRollCurrent += (headRollTarget - headRollCurrent) * Math.min(1, dt * 3.4);
+  bustYCurrent += (bustYTarget - bustYCurrent) * Math.min(1, dt * 3.0);
+  breathCurrent += (breathTarget - breathCurrent) * Math.min(1, dt * 3.1);
+
+  setParam(core, 'ParamAngleX', headTurnCurrent);
+  setParam(core, 'ParamAngleY', headPitchCurrent);
+  setParam(core, 'ParamAngleZ', headRollCurrent + bodySwayCurrent * 0.05);
+  setParam(core, 'ParamBodyAngleX', bodySwayCurrent);
+  setParam(core, 'ParamBreath', Math.max(0, Math.min(1, breathCurrent)));
+  setParam(core, 'ParamBustY', bustYCurrent);
+}
+
+function updateDrivenFace(now) {
+  if (!model) return;
+  if (!lastFrameAt) {
+    lastFrameAt = now;
+  }
+  if (now > talkingUntil && mouthOpenTarget < 0.01) {
+    mouthOpenTarget = 0;
+    mouthFormTarget = 0;
+  }
+  const openEase = mouthOpenTarget > mouthOpenCurrent ? 0.72 : 0.28;
+  const formEase = mouthFormTarget > mouthFormCurrent ? 0.48 : 0.22;
+  mouthOpenCurrent += (mouthOpenTarget - mouthOpenCurrent) * openEase;
+  mouthFormCurrent += (mouthFormTarget - mouthFormCurrent) * formEase;
+  if (Math.abs(mouthOpenCurrent) < 0.003) mouthOpenCurrent = 0;
+  if (Math.abs(mouthFormCurrent) < 0.003) mouthFormCurrent = 0;
+  applyMouth(mouthOpenCurrent, mouthFormCurrent);
+  applyTalkMotion(now);
+  lastFrameAt = now;
+}
+
+function ensureMouthLoop() {
+  if (app && app.ticker) {
+    if (mouthTickerAttached) return;
+    app.ticker.add(() => {
+      updateDrivenFace(performance.now());
+    });
+    mouthTickerAttached = true;
+    if (mouthRaf) {
+      cancelAnimationFrame(mouthRaf);
+      mouthRaf = null;
+    }
+    return;
+  }
+  if (mouthRaf) return;
+  const waitForTicker = () => {
+    if (app && app.ticker) {
+      mouthRaf = null;
+      ensureMouthLoop();
+      return;
+    }
+    mouthRaf = requestAnimationFrame(waitForTicker);
+  };
+  mouthRaf = requestAnimationFrame(waitForTicker);
+}
+
+function setMouthLevel(level) {
+  const raw = Math.max(0, Math.min(1, Number(level) || 0));
+  const v = raw <= 0.02 ? 0 : Math.min(1, Math.pow(raw, 0.78) * 1.18);
+  mouthOpenTarget = Math.max(mouthOpenTarget * 0.55, v);
+  mouthFormTarget = Math.max(-0.08, Math.min(0.72, v * 0.72 - 0.04));
+  talkingUntil = performance.now() + 150;
+  ensureMouthLoop();
+}
+
+function setTalking(active) {
+  if (active) {
+    stopStandbyMotions();
+    thinkingState = false;
+    if (!talkingState) {
+      phraseImpulseVelocity += 7.0;
+      phraseImpulse += 0.05;
+    }
+    talkingState = true;
+    talkingUntil = performance.now() + 220;
+    ensureMouthLoop();
+    updateMotionFromState(true);
+    return;
+  }
+  talkingState = false;
+  mouthOpenTarget = 0;
+  mouthFormTarget = 0;
+  suppressBodyMotion = false;
+  updateMotionFromState(false);
+}
+
+function setThinking(active) {
+  const next = !!active;
+  if (thinkingState === next) return;
+  thinkingState = next;
+  if (thinkingState) {
+    stopStandbyMotions();
+    ensureMouthLoop();
+  }
+  updateMotionFromState(true);
+}
+
+function getMotionItems(includeIdle) {
+  if (!model || !model.internalModel || !model.internalModel.settings) return [];
+  const motions = model.internalModel.settings.motions || {};
+  const items = [];
+  for (const group of Object.keys(motions)) {
+    const list = motions[group] || [];
+    for (let i = 0; i < list.length; i++) {
+      const file = String(list[i].File || list[i].file || '');
+      const isIdle = /idle/i.test(file);
+      if (includeIdle ? isIdle : !isIdle) {
+        items.push({ group, idx: i });
+      }
+    }
+  }
+  return items;
+}
+
+function getMotionFileName(item) {
+  if (!item) return '';
+  return String(item.file || item.File || '');
+}
+
+function findMotionByFileHints(hints) {
+  if (!model || !model.internalModel || !model.internalModel.settings) return null;
+  const normalizedHints = (hints || [])
+    .map((hint) => String(hint || '').trim().toLowerCase())
+    .filter(Boolean);
+  if (!normalizedHints.length) return null;
+  const motions = model.internalModel.settings.motions || {};
+  for (const group of Object.keys(motions)) {
+    const list = motions[group] || [];
+    for (let i = 0; i < list.length; i++) {
+      const file = getMotionFileName(list[i]).toLowerCase();
+      if (!file) continue;
+      for (const hint of normalizedHints) {
+        if (file.endsWith(hint) || file.includes(hint)) {
+          return { group, idx: i, file };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function requestNamedMotion(key, hints, force) {
+  const normalizedKey = String(key || '').trim().toLowerCase();
+  if (!force && currentMotionKey === normalizedKey) {
+    return motionDrivenAnimation;
+  }
+  const match = findMotionByFileHints(hints);
+  if (!match) {
+    if (currentMotionKey === normalizedKey) {
+      currentMotionKey = '';
+    }
+    motionDrivenAnimation = false;
+    return false;
+  }
+  stopCurrentMotion();
+  startMotionSafe(match.group, match.idx);
+  currentMotionKey = normalizedKey;
+  motionDrivenAnimation = true;
+  return true;
+}
+
+function stopCurrentMotion() {
+  try {
+    const manager = model && model.internalModel ? model.internalModel.motionManager : null;
+    if (!manager) return;
+    if (typeof manager.stopAllMotions === 'function') {
+      manager.stopAllMotions();
+      return;
+    }
+    if (typeof manager.stopAllMotion === 'function') {
+      manager.stopAllMotion();
+    }
+  } catch (_) {}
+}
+
+function updateMotionFromState(force) {
+  if (!model) return;
+  if (talkingState) {
+    if (speakingMotionMode === 'none') {
+      suppressBodyMotion = true;
+      motionDrivenAnimation = false;
+      currentMotionKey = 'speaking-none';
+      stopCurrentMotion();
+      return;
+    }
+    suppressBodyMotion = false;
+    if (speakingMotionMode === 'idle') {
+      if (requestNamedMotion('speaking-idle', ['idle.motion3.json'], force)) {
+        return;
+      }
+    }
+    if (requestNamedMotion('speaking-baishou', ['baishou.motion3.json'], force)) {
+      return;
+    }
+  } else if (thinkingState) {
+    suppressBodyMotion = false;
+    if (requestNamedMotion('thinking', ['sikao.motion3.json'], force)) {
+      return;
+    }
+  } else if (standbyState) {
+    suppressBodyMotion = false;
+    stopStandbyMotions();
+    if (requestNamedMotion('idle', ['idle.motion3.json'], force)) {
+      return;
+    }
+    motionDrivenAnimation = false;
+    currentMotionKey = 'standby-idle-fallback';
+    restoreIdleMotion();
+    return;
+  }
+
+  suppressBodyMotion = false;
+  if (requestNamedMotion('idle', ['idle.motion3.json'], force)) {
+    return;
+  }
+
+  motionDrivenAnimation = false;
+  currentMotionKey = 'idle-fallback';
+  restoreIdleMotion();
+}
+
+function startMotionSafe(group, idx) {
+  try {
+    if (model && model.internalModel && model.internalModel.motionManager) {
+      model.internalModel.motionManager.startMotion(group, idx);
+    }
+  } catch (_) {}
+}
+
+function restoreIdleMotion() {
+  const idleItems = getMotionItems(true);
+  if (idleItems.length) {
+    const pick = idleItems[0];
+    startMotionSafe(pick.group, pick.idx);
+  }
+}
+
+function startStandbyMotions() {
+  if (!standbyState) return;
+  if (talkingState) return;
+  if (thinkingState) return;
+  updateMotionFromState(true);
+}
+
+function stopStandbyMotions() {
+  if (standbyMotionTimer) {
+    clearTimeout(standbyMotionTimer);
+    standbyMotionTimer = null;
+  }
+  restoreIdleMotion();
+}
+
+function setStandby(active) {
+  standbyState = !!active;
+  if (standbyState) {
+    setTalking(false);
+    setThinking(false);
+    ensureMouthLoop();
+    startStandbyMotions();
+    return;
+  }
+  suppressBodyMotion = false;
+  stopStandbyMotions();
+  updateMotionFromState(false);
+}
+
+function setSpeechMotionMode(mode) {
+  const normalized = String(mode || '').trim().toLowerCase();
+  if (normalized === 'none') {
+    speakingMotionMode = 'none';
+  } else if (normalized === 'idle') {
+    speakingMotionMode = 'idle';
+  } else {
+    speakingMotionMode = 'baishou';
+  }
+  if (talkingState) {
+    updateMotionFromState(true);
+  }
+}
+
+function resetStaticSpeakingPose() {
+  const core = getCoreModel();
+  speakingMotionMode = 'none';
+  motionDrivenAnimation = false;
+  suppressBodyMotion = true;
+  currentMotionKey = 'speaking-none-reset';
+  talkingUntil = 0;
+  mouthOpenTarget = 0;
+  mouthFormTarget = 0;
+  mouthOpenCurrent = 0;
+  mouthFormCurrent = 0;
+  talkPoseTarget = 0;
+  talkPoseCurrent = 0;
+  talkStrengthCurrent = 0;
+  bodyEnergyCurrent = 0;
+  phraseImpulse = 0;
+  phraseImpulseVelocity = 0;
+  cuePitch = 0;
+  cueTurn = 0;
+  cueBody = 0;
+  cueLift = 0;
+  bodySwayCurrent = 0;
+  headTurnCurrent = 0;
+  headPitchCurrent = 0;
+  headRollCurrent = 0;
+  bustYCurrent = 0;
+  breathCurrent = 0.46;
+  stopCurrentMotion();
+  applyMouth(0, 0);
+  if (core) {
+    setParam(core, 'ParamAngleX', 0);
+    setParam(core, 'ParamAngleY', 0);
+    setParam(core, 'ParamAngleZ', 0);
+    setParam(core, 'ParamBodyAngleX', 0);
+  }
+}
+
+function beginSpeaking(mode) {
+  setSpeechMotionMode(mode);
+  setThinking(false);
+  setTalking(true);
+}
+
+function triggerSpeechCue(type) {
+  const cue = String(type || '').toLowerCase();
+  if (!cue) return;
+  if (cue === 'comma') {
+    phraseImpulseVelocity += 5.2;
+    cuePitch += 0.16;
+    cueBody += 0.06;
+    return;
+  }
+  if (cue === 'period') {
+    phraseImpulseVelocity -= 2.4;
+    cuePitch -= 0.15;
+    cueBody -= 0.07;
+    cueLift -= 0.06;
+    return;
+  }
+  if (cue === 'question') {
+    phraseImpulseVelocity += 7.0;
+    cuePitch += 0.18;
+    cueTurn += 0.08;
+    cueLift += 0.06;
+    return;
+  }
+  if (cue === 'exclaim') {
+    phraseImpulseVelocity += 8.5;
+    cuePitch += 0.15;
+    cueBody += 0.12;
+    cueTurn += 0.05;
+    return;
+  }
+  if (cue === 'pause') {
+    cuePitch -= 0.08;
+    cueBody -= 0.03;
+  }
+}
+
+function fitModel() {
+  if (!app || !model) return;
+  model.scale.set(1);
+  const w = (app.screen && app.screen.width) || window.innerWidth;
+  const h = (app.screen && app.screen.height) || window.innerHeight;
+  const isLandscape = !previewMode && w > h;
+  const sw = model.width || 1;
+  const sh = model.height || 1;
+  const scaleFactor = previewMode ? 0.72 : (isLandscape ? 1.0 : 1.18);
+  const scale = Math.min((w * scaleFactor) / sw, (h * scaleFactor) / sh) * modelScaleOverride * modelHeightRatio;
+  modelGestureState.baseScale = scale;
+  modelGestureState.baseX = w * 0.5;
+  modelGestureState.baseY = previewMode ? h * 0.58 : (isLandscape ? h * 0.64 : h * 0.62);
+  applyModelGestureTransform();
+}
+
+function applyModelGestureTransform() {
+  if (!model) return;
+  model.scale.set(modelGestureState.baseScale * modelGestureState.scale);
+  model.anchor.set(0.5, 0.5);
+  model.x = modelGestureState.baseX + modelGestureState.offsetX;
+  model.y = modelGestureState.baseY + modelGestureState.offsetY;
+}
+
+function refreshLayout() {
+  try {
+    if (app && app.renderer) {
+      app.renderer.resize(window.innerWidth, window.innerHeight);
+    }
+  } catch (_) {}
+  fitModel();
+}
+
+function installModelGestureControls() {
+  if (previewMode || !app || !app.view) return;
+  const canvas = app.view;
+  canvas.style.touchAction = 'none';
+  canvas.addEventListener('pointerdown', (event) => {
+    modelGestureState.active.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    try { canvas.setPointerCapture(event.pointerId); } catch (_) {}
+    if (modelGestureState.active.size === 1) {
+      modelGestureState.dragging = false;
+      modelGestureState.pinching = false;
+      modelGestureState.lastX = event.clientX;
+      modelGestureState.lastY = event.clientY;
+      clearTimeout(modelGestureState.activateTimer);
+      modelGestureState.activateTimer = setTimeout(() => {
+        modelGestureState.editing = true;
+        modelGestureState.dragging = true;
+        if (canvas) canvas.style.filter = 'drop-shadow(0 0 22px rgba(255,193,7,.8))';
+        showHint('已进入模型调整：拖动或双指缩放');
+      }, 1500);
+    } else if (modelGestureState.editing && modelGestureState.active.size >= 2) {
+      modelGestureState.dragging = false;
+      modelGestureState.pinching = true;
+      modelGestureState.pinchDistance = activePointerDistance();
+      modelGestureState.pinchScale = modelGestureState.scale;
+    }
+    event.preventDefault();
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (!modelGestureState.active.has(event.pointerId)) return;
+    modelGestureState.active.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (!modelGestureState.editing) {
+      event.preventDefault();
+      return;
+    }
+    if (modelGestureState.pinching && modelGestureState.active.size >= 2) {
+      const distance = activePointerDistance();
+      if (modelGestureState.pinchDistance > 0 && distance > 0) {
+        modelGestureState.scale = clampNumber(modelGestureState.pinchScale * distance / modelGestureState.pinchDistance, 0.35, 3.0);
+        applyModelGestureTransform();
+      }
+    } else if (modelGestureState.dragging && modelGestureState.active.size === 1) {
+      modelGestureState.offsetX += event.clientX - modelGestureState.lastX;
+      modelGestureState.offsetY += event.clientY - modelGestureState.lastY;
+      modelGestureState.lastX = event.clientX;
+      modelGestureState.lastY = event.clientY;
+      applyModelGestureTransform();
+    }
+    event.preventDefault();
+  });
+  const endPointer = (event) => {
+    clearTimeout(modelGestureState.activateTimer);
+    const wasEditing = modelGestureState.editing;
+    modelGestureState.active.delete(event.pointerId);
+    try { canvas.releasePointerCapture(event.pointerId); } catch (_) {}
+    if (modelGestureState.active.size === 1 && modelGestureState.editing) {
+      const point = Array.from(modelGestureState.active.values())[0];
+      modelGestureState.dragging = true;
+      modelGestureState.pinching = false;
+      modelGestureState.lastX = point.x;
+      modelGestureState.lastY = point.y;
+    } else if (modelGestureState.active.size === 0) {
+      modelGestureState.dragging = false;
+      modelGestureState.pinching = false;
+      modelGestureState.editing = false;
+      canvas.style.filter = '';
+      if (wasEditing) saveModelTransform();
+    }
+  };
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+}
+
+function activePointerDistance() {
+  const points = Array.from(modelGestureState.active.values());
+  if (points.length < 2) return 0;
+  const dx = points[0].x - points[1].x;
+  const dy = points[0].y - points[1].y;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function saveModelTransform() {
+  try {
+    localStorage.setItem('live2d_model_transform', JSON.stringify({
+      x: modelGestureState.offsetX,
+      y: modelGestureState.offsetY,
+      scale: modelGestureState.scale
+    }));
+  } catch (_) {}
+}
+
+window.resetModelTransform = function() {
+  modelGestureState.offsetX = 0;
+  modelGestureState.offsetY = 0;
+  modelGestureState.scale = 1;
+  try { localStorage.removeItem('live2d_model_transform'); } catch (_) {}
+  applyModelGestureTransform();
+};
+
+function installDrivenFaceUpdateHook() {
+  try {
+    const internal = model && model.internalModel ? model.internalModel : null;
+    if (!internal || internal.__androidDrivenFaceHookInstalled) {
+      return;
+    }
+    if (typeof internal.update !== 'function') {
+      return;
+    }
+    const originalUpdate = internal.update.bind(internal);
+    internal.update = function (...args) {
+      const result = originalUpdate(...args);
+      resolveMouthParameterIndices(false);
+      updateDrivenFace(performance.now());
+      return result;
+    };
+    internal.__androidDrivenFaceHookInstalled = true;
+  } catch (_) {}
+}
+
+async function init() {
+  try {
+    if (previewMode) {
+      document.body.style.background = 'transparent';
+      if (statusEl) statusEl.style.display = 'none';
+      if (hintEl) hintEl.style.display = 'none';
+    }
+    // setStatus('PIXI 初始化中...');
+    try {
+      app = new PIXI.Application({
+        resizeTo: window,
+        backgroundAlpha: 0,
+        antialias: true,
+        autoDensity: true,
+        resolution: renderResolution
+      });
+    } catch (_) {
+      // Fallback for devices/WebView implementations that reject high-DPI canvas creation.
+      app = new PIXI.Application({
+        resizeTo: window,
+        backgroundAlpha: 0,
+        antialias: true,
+        autoDensity: true
+      });
+    }
+    window.PIXI = PIXI;
+    document.body.appendChild(app.view);
+    installModelGestureControls();
+
+    if (!PIXI.live2d || !PIXI.live2d.Live2DModel) {
+      throw new Error('Live2D 插件未正确加载');
+    }
+
+    // setStatus('正在加载模型...');
+    model = await PIXI.live2d.Live2DModel.from(modelUrl);
+    resolveMouthParameterIndices(true);
+    installDrivenFaceUpdateHook();
+    app.stage.addChild(model);
+    refreshLayout();
+
+    try { model.once('ready', refreshLayout); } catch {}
+    try { model.once('load', refreshLayout); } catch {}
+    window.addEventListener('resize', refreshLayout);
+    ensureMouthLoop();
+    if (standbyState) {
+      startStandbyMotions();
+    } else {
+      updateMotionFromState(true);
+    }
+
+    // setStatus('Live2D 已在安卓端加载成功');
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    // setStatus('Live2D 加载失败: ' + msg);
+    try { console.error(err); } catch {}
+  }
+}
+
+window.addEventListener('error', (event) => {
+  const msg = event && event.message ? event.message : 'unknown error';
+  setStatus('页面错误: ' + msg);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event && event.reason ? (event.reason.message || String(event.reason)) : 'unknown rejection';
+  setStatus('Promise 错误: ' + reason);
+});
+
+window.setAndroidStatus = function (text) {
+  setStatus(text || '');
+};
+
+window.setAndroidHint = function (text) {
+  setHint(text || '');
+};
+
+window.setAndroidMouthLevel = function (level) {
+  setMouthLevel(level);
+};
+
+window.setAndroidTalking = function (active) {
+  setTalking(!!active);
+};
+
+window.setAndroidThinking = function (active) {
+  setThinking(!!active);
+};
+
+window.setAndroidSpeechMotionMode = function (mode) {
+  setSpeechMotionMode(mode);
+};
+
+window.beginAndroidSpeaking = function (mode) {
+  beginSpeaking(mode);
+};
+
+window.resetAndroidStaticSpeakingPose = function () {
+  resetStaticSpeakingPose();
+};
+
+window.setAndroidStandby = function (active) {
+  setStandby(!!active);
+};
+
+window.setAndroidSpeechCue = function (type) {
+  triggerSpeechCue(type);
+};
+
+window.refreshAndroidLayout = function () {
+  refreshLayout();
+};
+
+init();
+</script>
+</body>
+</html>

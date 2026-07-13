@@ -1,0 +1,48 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "mrlu.moc3",
+		"Textures": [
+			"mrlu.2048/texture_00.png"
+		],
+		"Physics": "mrlu.physics3.json",
+		"DisplayInfo": "mrlu.cdi3.json",
+		"MotionSync": "mrlu.motionsync3.json",
+		"Motions": {
+			"": [
+				{
+					"File": "motion/baishou 2.motion3.json",
+					"MotionSync": "mouth"
+				},
+				{
+					"File": "motion/baishou.motion3.json",
+					"MotionSync": "mouth"
+				},
+				{
+					"File": "motion/sikao.motion3.json"
+				}
+			],
+			"Idle": [
+				{
+					"File": "motion/idle.motion3.json"
+				}
+			]
+		}
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": [
+				"ParamEyeLOpen",
+				"ParamEyeROpen"
+			]
+		},
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		}
+	],
+	"HitAreas": []
+}

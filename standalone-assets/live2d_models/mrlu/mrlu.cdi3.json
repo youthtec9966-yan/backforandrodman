@@ -1,0 +1,380 @@
+{
+	"Version": 3,
+	"Parameters": [
+		{
+			"Id": "Param",
+			"GroupId": "",
+			"Name": "摆手"
+		},
+		{
+			"Id": "Param7",
+			"GroupId": "",
+			"Name": "思考"
+		},
+		{
+			"Id": "Param5",
+			"GroupId": "",
+			"Name": "挥手2"
+		},
+		{
+			"Id": "Param6",
+			"GroupId": "",
+			"Name": "挥手3"
+		},
+		{
+			"Id": "Param2",
+			"GroupId": "",
+			"Name": "思考"
+		},
+		{
+			"Id": "ParamHairSide5",
+			"GroupId": "",
+			"Name": "hf1"
+		},
+		{
+			"Id": "ParamHairSide6",
+			"GroupId": "",
+			"Name": "hf2"
+		},
+		{
+			"Id": "ParamHairSide8",
+			"GroupId": "",
+			"Name": "lear1"
+		},
+		{
+			"Id": "ParamHairSide9",
+			"GroupId": "",
+			"Name": "lear2"
+		},
+		{
+			"Id": "ParamHairSide10",
+			"GroupId": "",
+			"Name": "rear1"
+		},
+		{
+			"Id": "ParamHairSide11",
+			"GroupId": "",
+			"Name": "rear2"
+		},
+		{
+			"Id": "Param9",
+			"GroupId": "",
+			"Name": "左手"
+		},
+		{
+			"Id": "Param10",
+			"GroupId": "",
+			"Name": "左手2"
+		},
+		{
+			"Id": "Param11",
+			"GroupId": "",
+			"Name": "右手"
+		},
+		{
+			"Id": "Param12",
+			"GroupId": "",
+			"Name": "右手2"
+		},
+		{
+			"Id": "Param3",
+			"GroupId": "",
+			"Name": "lgg"
+		},
+		{
+			"Id": "Param4",
+			"GroupId": "",
+			"Name": "rgg"
+		},
+		{
+			"Id": "Param17",
+			"GroupId": "",
+			"Name": "lyanpi"
+		},
+		{
+			"Id": "Param19",
+			"GroupId": "",
+			"Name": "lyanzhu"
+		},
+		{
+			"Id": "Param18",
+			"GroupId": "",
+			"Name": "ryanpi"
+		},
+		{
+			"Id": "Param20",
+			"GroupId": "",
+			"Name": "ryanzhu"
+		},
+		{
+			"Id": "ParamHairFront1",
+			"GroupId": "",
+			"Name": "1前发"
+		},
+		{
+			"Id": "ParamHairFront2",
+			"GroupId": "",
+			"Name": "2前发2"
+		},
+		{
+			"Id": "ParamAngleX",
+			"GroupId": "",
+			"Name": "角度 X"
+		},
+		{
+			"Id": "ParamAngleY",
+			"GroupId": "",
+			"Name": "角度 Y"
+		},
+		{
+			"Id": "ParamAngleZ",
+			"GroupId": "",
+			"Name": "角度 Z"
+		},
+		{
+			"Id": "ParamEyeLOpen",
+			"GroupId": "",
+			"Name": "左眼 开闭"
+		},
+		{
+			"Id": "ParamEyeLSmile",
+			"GroupId": "",
+			"Name": "左眼 微笑"
+		},
+		{
+			"Id": "ParamEyeROpen",
+			"GroupId": "",
+			"Name": "右眼 开闭"
+		},
+		{
+			"Id": "ParamEyeRSmile",
+			"GroupId": "",
+			"Name": "右眼 微笑"
+		},
+		{
+			"Id": "ParamEyeBallX",
+			"GroupId": "",
+			"Name": "眼珠 X"
+		},
+		{
+			"Id": "ParamEyeBallY",
+			"GroupId": "",
+			"Name": "眼珠 Y"
+		},
+		{
+			"Id": "ParamBrowLY",
+			"GroupId": "",
+			"Name": "左眉 上下"
+		},
+		{
+			"Id": "ParamBrowRY",
+			"GroupId": "",
+			"Name": "右眉 上下"
+		},
+		{
+			"Id": "ParamBrowLX",
+			"GroupId": "",
+			"Name": "左眉 左右"
+		},
+		{
+			"Id": "ParamBrowRX",
+			"GroupId": "",
+			"Name": "右眉 左右"
+		},
+		{
+			"Id": "ParamBrowLAngle",
+			"GroupId": "",
+			"Name": "左眉 角度"
+		},
+		{
+			"Id": "ParamBrowRAngle",
+			"GroupId": "",
+			"Name": "右眉 角度"
+		},
+		{
+			"Id": "ParamBrowLForm",
+			"GroupId": "",
+			"Name": "左眉 変形"
+		},
+		{
+			"Id": "ParamBrowRForm",
+			"GroupId": "",
+			"Name": "右眉 変形"
+		},
+		{
+			"Id": "ParamMouthForm",
+			"GroupId": "",
+			"Name": "嘴 变形"
+		},
+		{
+			"Id": "ParamMouthOpenY",
+			"GroupId": "",
+			"Name": "嘴 开闭"
+		},
+		{
+			"Id": "ParamCheek",
+			"GroupId": "",
+			"Name": "脸颊泛红"
+		},
+		{
+			"Id": "ParamBodyAngleX",
+			"GroupId": "",
+			"Name": "身体旋转 X"
+		},
+		{
+			"Id": "ParamBodyAngleY",
+			"GroupId": "",
+			"Name": "身体旋转 Y"
+		},
+		{
+			"Id": "ParamBodyAngleZ",
+			"GroupId": "",
+			"Name": "身体旋转 Z"
+		},
+		{
+			"Id": "ParamBreath",
+			"GroupId": "",
+			"Name": "呼吸"
+		},
+		{
+			"Id": "ParamHairFront",
+			"GroupId": "",
+			"Name": "摇动 前发"
+		},
+		{
+			"Id": "ParamHairSide",
+			"GroupId": "",
+			"Name": "摇动 侧发"
+		},
+		{
+			"Id": "ParamHairBack",
+			"GroupId": "",
+			"Name": "摇动 后发"
+		}
+	],
+	"ParameterGroups": [],
+	"Parts": [
+		{
+			"Id": "Part47",
+			"Name": "鹿先生.psd(未找到对应图层)"
+		},
+		{
+			"Id": "Part43",
+			"Name": "鹿先生.psd(未找到对应图层)"
+		},
+		{
+			"Id": "Part",
+			"Name": "动作3-思考"
+		},
+		{
+			"Id": "Part4",
+			"Name": "头2"
+		},
+		{
+			"Id": "Part12",
+			"Name": "上衣"
+		},
+		{
+			"Id": "Part13",
+			"Name": "动作3-思考"
+		},
+		{
+			"Id": "Part14",
+			"Name": "动作2-垂放"
+		},
+		{
+			"Id": "Part35",
+			"Name": "动作2-垂放"
+		},
+		{
+			"Id": "Part2",
+			"Name": "1"
+		},
+		{
+			"Id": "Part3",
+			"Name": "2"
+		},
+		{
+			"Id": "Part5",
+			"Name": "11眼睛 副本"
+		},
+		{
+			"Id": "Part6",
+			"Name": "22眼睛 副本"
+		},
+		{
+			"Id": "Part7",
+			"Name": "嘴巴"
+		},
+		{
+			"Id": "Part10",
+			"Name": "鹿角 副本"
+		},
+		{
+			"Id": "Part11",
+			"Name": "鹿角 副本 2"
+		},
+		{
+			"Id": "Part17",
+			"Name": "腿2-正常站立"
+		},
+		{
+			"Id": "Part15",
+			"Name": "1"
+		},
+		{
+			"Id": "Part16",
+			"Name": "2"
+		},
+		{
+			"Id": "Part36",
+			"Name": "1"
+		},
+		{
+			"Id": "Part37",
+			"Name": "2"
+		},
+		{
+			"Id": "Part8",
+			"Name": "图层组1"
+		},
+		{
+			"Id": "Part9",
+			"Name": "口腔"
+		},
+		{
+			"Id": "Part20",
+			"Name": "1"
+		},
+		{
+			"Id": "Part18",
+			"Name": "动作1-摆手"
+		},
+		{
+			"Id": "Part19",
+			"Name": "2"
+		},
+		{
+			"Id": "Part21",
+			"Name": "腿1-正常站立"
+		}
+	],
+	"CombinedParameters": [
+		[
+			"Param5",
+			"Param6"
+		],
+		[
+			"ParamHairSide10",
+			"ParamHairSide11"
+		],
+		[
+			"ParamHairFront1",
+			"ParamHairFront2"
+		],
+		[
+			"ParamMouthForm",
+			"ParamMouthOpenY"
+		]
+	]
+}

@@ -1,0 +1,63 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "yange.moc3",
+		"Textures": [
+			"yange.2048/texture_00.png"
+		],
+		"Physics": "yange.physics3.json",
+		"DisplayInfo": "yange.cdi3.json",
+		"MotionSync": "yange.motionsync3.json",
+		"Motions": {
+			"": [
+				{
+					"File": "motion/beishou.motion3.json",
+					"MotionSync": "mouth",
+					"FadeInTime": 0,
+					"FadeOutTime": 0
+				},
+				{
+					"File": "motion/sikao.motion3.json",
+					"MotionSync": "mouth",
+					"FadeInTime": 0,
+					"FadeOutTime": 0
+				},
+				{
+					"File": "motion/baishou.motion3.json",
+					"MotionSync": "mouth",
+					"FadeInTime": 0,
+					"FadeOutTime": 0
+				},
+				{
+					"File": "motion/baishou 2.motion3.json",
+					"MotionSync": "mouth",
+					"FadeInTime": 0,
+					"FadeOutTime": 0
+				}
+			],
+			"Idle": [
+				{
+					"File": "motion/idle.motion3.json",
+					"FadeInTime": 0,
+					"FadeOutTime": 0
+				}
+			]
+		}
+	},
+	"Groups": [
+		{
+			"Target": "Parameter",
+			"Name": "EyeBlink",
+			"Ids": [
+				"ParamEyeLOpen",
+				"ParamEyeROpen"
+			]
+		},
+		{
+			"Target": "Parameter",
+			"Name": "LipSync",
+			"Ids": []
+		}
+	],
+	"HitAreas": []
+}
